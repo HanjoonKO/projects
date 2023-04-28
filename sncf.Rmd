@@ -1,0 +1,513 @@
+---
+title: "Projet collaboratif"
+author: "Hanjoon Ko, Solène Tagmount, Gracia Yan, Noureen Mansour Farid"
+date: "2023-04-15"
+output: 
+ html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+---
+
+-   [Data source : Kaggle (lien)](https://www.kaggle.com/datasets/gatandubuc/public-transport-traffic-data-in-france?resource=download)
+-   Producteur originaire : SNCF Voyageurs
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(gplots)
+library(esquisse)
+library(ggplot2)
+library(readr)
+library(plotly)
+library(skimr)
+library(gifski)
+library(gganimate)
+library(patchwork)
+library(paletteer)
+
+Trains <- read_csv("~/Regularities_by_liaisons_Trains_France.csv")
+
+
+
+```
+
+ 
+
+# Introduction
+
+Ce jeu de données est issu de SNCF Open Data et a été nettoyé par Gaétan Dubuc, un data scientist chez Fogo (version anglaise). Il se compose de 32 colonnes d'informations pour chaque ligne de train par mois, pour toutes les lignes TGV de l'année 2015 à 2020. Dans le cadre de ce projet collaboratif, après avoir effectué une analyse générale, nous allons nous concentrer sur les informations relatives à la durée des trajets, aux trains en retard et à leurs fréquences, en visualisant leur relation. Ainsi, nous voulons tenter de trouver des corrélations qui expliqueraient la quantité de retard, la répartition des lignes selon les gares ou encore les pics de fréquentation de trains.
+
+ 
+
+# I. Analyse sommaire
+
+### 1. La circulation moyenne de trains par mois
+
+```{r echo=FALSE}
+Trains %>% 
+  group_by(Year) %>% 
+  summarise(circulations_moyenne = mean(`Number of expected circulations`, na.rm = TRUE))
+```
+
+En créant une nouvelle colonne montrant le nombre moyen de circulations prévues, on peut comparer les moyennes pour chaque année. Ce qui est intéressant, c'est que le chiffre a fortement diminué depuis 2020, année où la pandémie de Covid-19 s'est propagée dans le monde entier. Jusqu'à 2020, le nombre moyen de trajets TGV par mois était de 276,2.
+
+ 
+
+### 2. Les trajets les plus longs et les plus courts
+
+**Les trajets les plus longs**
+
+```{r echo=FALSE}
+Trains %>% 
+  mutate(duree_heures = `Average travel time (min)`/60) %>% 
+  select(duree_heures, `Departure station`, `Arrival station`) %>% 
+  arrange(-duree_heures)
+```
+
+On constate que le trajet le plus long est celui entre Strasbourg et Nantes, d'une durée de 13H01min. Il y a sûrement eu des problèmes anormaux mais qui ne sont pas mentionnés. Si nécessaire, on peut supprimer cette donnée très atypique pour une visualisation plus lisible. En revanche, les liaisons entre Madrid et Marseille occupent du deuxième au dixième rang, ce qui signifie que le trajet entre ces deux villes est normalement le plus long. Pour cette analyse, on a créé une nouvelle colonne "duree_heure" en divisant "Average travel time (min)" par 60.
+
+ 
+
+**Les trajets les plus courts**
+
+```{r echo=FALSE}
+Trains %>% 
+  select(`Average travel time (min)`, `Departure station`, `Arrival station`) %>% 
+  arrange(`Average travel time (min)`)
+```
+
+Il y a également une donnée étrange qui montre une durée de trajet de 35 minutes entre Barcelone et Paris Lyon. Si on ignore cette donnée, le trajet le plus court est celui entre Paris Est et Reims.
+
+ 
+
+### 3. Quelle est la durée des trajets au départ de Paris ?
+
+Nous regardons en détail la durée pour chaque connexion au départ des différentes gares de Paris.
+
+ 
+
+```{r include=FALSE}
+Trains %>%
+  filter(`Departure station` == "PARIS MONTPARNASSE") %>%
+  group_by(Year) %>%
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>%
+  mutate(heures_trajet = trajet_moyen/60)
+
+Trains %>% 
+  filter(`Departure station` == "PARIS NORD") %>% 
+  group_by(Year) %>% 
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>% 
+  mutate(heures_trajet = trajet_moyen/60)
+
+Trains %>% 
+  filter(`Departure station` == "PARIS LYON") %>% 
+  group_by(Year) %>% 
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>% 
+  mutate(heures_trajet = trajet_moyen/60)
+
+Trains %>% 
+  filter(`Departure station` == "PARIS EST") %>% 
+  group_by(Year) %>% 
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>% 
+  mutate(heures_trajet = trajet_moyen/60)
+
+```
+
+```{r echo=FALSE}
+Paris_montparnasse <-
+  Trains %>%
+  filter(`Departure station` == "PARIS MONTPARNASSE") %>%
+  group_by(Year) %>%
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>%
+  mutate(heures_trajet = trajet_moyen/60) %>%
+  ggplot() +
+  aes(x = Year, y = heures_trajet, fill = heures_trajet) +
+  geom_col(show.legend = FALSE) +
+  scale_x_continuous(breaks = seq(2015, 2020, 1)) +
+  scale_y_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5), limits = c(0, 3.5))+
+  scale_fill_distiller(palette = "GnBu", direction = 1, limits = c(0, 3.5)) +
+  labs(x = "Année", y = "Heures de trajet", title = "Paris-Montparnasse", 
+       fill = "Durée du trajet") 
+
+Paris_nord <-
+  Trains %>%
+  filter(`Departure station` == "PARIS NORD") %>%
+  group_by(Year) %>%
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>%
+  mutate(heures_trajet = trajet_moyen/60) %>%
+  ggplot() +
+  aes(x = Year, y = heures_trajet, fill = heures_trajet) +
+  geom_col() +
+  scale_x_continuous(breaks = seq(2015, 2020, 1)) +
+  scale_y_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5), limits = c(0, 3.5))+
+  scale_fill_distiller(palette = "GnBu", direction = 1, limits = c(0, 3.5)) +
+  labs(x = "Année", y = "Heures de trajet", title = "Paris-Nord", 
+       fill = "Heures de trajet") 
+
+Paris_lyon <-
+  Trains %>%
+  filter(`Departure station` == "PARIS LYON") %>%
+  group_by(Year) %>%
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>%
+  mutate(heures_trajet = trajet_moyen/60) %>%
+  ggplot() +
+  aes(x = Year, y = heures_trajet, fill = heures_trajet) +
+  geom_col(show.legend = FALSE)+
+  scale_x_continuous(breaks = seq(2015, 2020, 1)) +
+  scale_y_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5), limits = c(0, 3.5))+
+  scale_fill_distiller(palette = "GnBu", direction = 1, limits = c(0, 3.5)) +
+  labs(x = "Année", y = "Heures de trajet", title = "Paris-Lyon", 
+       fill = "Durée du trajet" )
+
+Paris_est <-
+  Trains %>%
+  filter(`Departure station` == "PARIS EST") %>%
+  group_by(Year) %>%
+  summarise(trajet_moyen = mean(`Average travel time (min)`, na.rm = TRUE)) %>%
+  mutate(heures_trajet = trajet_moyen/60) %>%
+  ggplot() +
+  aes(x = Year, y = heures_trajet, fill = heures_trajet) +
+  geom_col(show.legend = FALSE) +
+  scale_x_continuous(breaks = seq(2015, 2020, 1)) +
+  scale_y_continuous(breaks = c(0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5), limits = c(0, 3.5))+
+  scale_fill_distiller(palette = "GnBu", direction = 1, limits = c(0, 3.5)) +  
+  labs(x = "Année", y = "Heures de trajet",
+          title = "Paris-Est", fill = "Durée du trajet") 
+
+Paris_trajet <- (Paris_lyon + Paris_montparnasse +Paris_est + Paris_nord)
+Paris_trajet + 
+  plot_annotation(
+    "Temps d'un trajet au départ de quatre gares de Paris", 
+    theme = theme(plot.title = element_text(face = "bold", size = 12)), 
+    caption = "Université Paris Nanterre DES 22/23
+    Projet collaboratif"
+  ) + 
+  plot_layout(guides = 'collect', height = 600, width =800) +
+  theme(legend.box = 'horizontal')
+```
+
+ 
+
+Les destinations au départ de **Montparnasse** vont vers le Grand Ouest ce qui explique la courte durée. Les heures moyennes de trajets au départ de **Paris Nord** varient entre 1h23 et 1h31, ce qui est encore plus court puisque les destinations ne sont pas très éloignées. Au départ de la **Gare de Lyon** à Paris, les trajets durent en moyenne 3h. Depuis **Paris Est**, les trajets sont en moyenne de 1h30 et 2h, on a des destinations très proches comme des destinations allemandes.
+
+En fonction des gares de départ nous constatons que le temps de trajet est différent mais reste relativement court puisque entre les grandes gares, il y a principalement des TGV qui circulent. Les liaisons comprenant Paris sont donc rapides et il est possible que les individus favorisent ce moyen de locomotion pour partir à proximité pendant les week-ends par exemple.
+
+ 
+
+# II. Analyse du retard
+
+### 1. Y a-t-il une relation entre la durée moyenne du trajet et la proportion de retard au départ ?
+
+ 
+
+**Relation entre la durée et le pourcentage du retard**
+
+Afin de déterminer le nombre de trains ayant effectivement circulé et le pourcentage de retards, nous avons créé deux nouvelles colonnes, intitulées "number_trains" et "prct_retard_depart". Pour la seconde colonne, nous avons calculé le nombre de trains en retard au départ et l'avons divisé par le nombre total de trains ayant effectivement circulé.
+
+Après avoir retiré deux données atypiques, nous avons examiné la relation entre la durée moyenne des trajets et le pourcentage de retards au départ en utilisant une visualisation graphique. Nous avons ensuite effectué un test du coefficient de corrélation de Pearson et ajouté une ligne sur le graphe pour représenter les résultats de ce test. Néanmoins, nous n'avons pas observé de corrélation significative, ni dans le graphe, ni dans le résultat de test (Le coefficient de corrélation = -0.02)
+
+ 
+
+```{r include=FALSE}
+Trains <- Trains %>%
+  mutate(number_trains =`Number of expected circulations` - `Number of cancelled trains`)
+```
+
+```{r include=FALSE}
+Trains <- Trains %>%
+  mutate("prct_retard_depart" = `Number of late trains at departure`/ number_trains)
+```
+
+```{r include=FALSE}
+Trains_typique <- Trains %>%
+  filter(`Average travel time (min)` < 700) %>%
+  filter(36 < `Average travel time (min)`)
+```
+
+```{r echo=FALSE}
+line <- lm(Trains_typique$prct_retard_depart ~ Trains_typique$`Average travel time (min)`)
+ggplot(Trains_typique, aes(x = `Average travel time (min)`, y = prct_retard_depart, colour = Year)) +
+  geom_point(shape = "circle", size = 1.5) +
+  geom_abline(intercept = coef(line)[1], slope = coef(line)[2], color = "red") +
+  scale_color_viridis_c(breaks = c(2015,2016,2017,2018,2019,2020), direction = 1) +
+  labs(title = "Relation entre la durée moyenne de trajet et le pourcentage du retard au départ",
+       caption = "Université Paris Nanterre DES 22/23 
+       Projet collaboratif", 
+       x = "Durée moyenne de trajet (min)", y = "Pourcentage du retard au départ (%)", color = "Année") +
+  theme_minimal()
+```
+
+```{r echo=FALSE}
+cor(Trains_typique$prct_retard_depart, Trains_typique$`Average travel time (min)`, use = "complete.obs")
+```
+
+ 
+
+**Relation entre l'année et le pourcentage du retard**
+
+Par contre, en observant la distribution des points colorés par année, nous avons remarqué que les années les plus récentes sont davantage représentées en haut du graphique, indiquant ainsi un taux de retard plus élevé par rapport aux années précédentes. Dans le graphique animé, nous pouvons observer que les points représentant chaque année se déplacent vers le haut au fil du temps, ce qui confirme la relation positive entre l'année et le pourcentage de retard. Enfin, le coefficient de corrélation entre les deux variables est positif (R = 0,67).
+
+ 
+
+```{r echo=FALSE}
+plot_duree_prct <- ggplot(Trains_typique) +
+  aes(x = `Average travel time (min)`, y = prct_retard_depart, colour = Year) +
+  geom_point(shape = "circle", size = 1.5) +
+  scale_color_viridis_c(breaks = c(2015,2016,2017,2018,2019,2020), direction = 1) +
+  labs(title = "Relation entre l'année et le pourcentage du retard au départ", caption = "Université Paris Nanterre DES 22/23
+      Projet collaboratif", 
+       color = "Année", x = "Durée moyenne de trajet (min)", y = "Pourcentage du retard au départ (%)") +
+  theme_minimal()
+
+animate(plot_duree_prct + transition_time(Year) + ease_aes('cubic-in-out'))
+
+cor(Trains_typique$Year, Trains_typique$prct_retard_depart, use = "complete.obs")
+
+```
+
+```{r include=FALSE}
+Trains %>%
+  filter(Year == 2015) %>%
+  skim(prct_retard_depart)
+
+Trains %>%
+  filter(Year == 2016) %>%
+  skim(prct_retard_depart)
+
+Trains %>%
+  filter(Year == 2017) %>%
+  skim(prct_retard_depart)
+
+Trains %>%
+  filter(Year == 2018) %>%
+  skim(prct_retard_depart)
+
+Trains %>%
+  filter(Year == 2019) %>%
+  skim(prct_retard_depart)
+
+Trains %>%
+  filter(Year == 2020) %>%
+  skim(prct_retard_depart)
+```
+
+Afin d'obtenir des informations plus détaillées, nous avons utilisé une fonction de filtre et de skim pour établir le pourcentage moyen de retard au départ pour chaque année. Les résultats obtenus indiquent que le pourcentage moyen de retard était de 9,27 % en 2015, 10,8 % en 2016, 12,1 % en 2017, 28,2 % en 2018, 50,7 % en 2019 et 65,8 % en 2020.
+
+Il est claire que le pourcentage du retard augmente au fur et à mesure des années et cette augmentation s'accélère à partir de 2019. Les raisons peuvent être multiples et se superposent sûrement : le Covid-19 et les perturbations du service ferroviaire causées par les grèves de 2019. Ces grèves, qui ont eu lieu entre décembre 2019 et février 2020, témoignent du mécontentement des salariés face aux emplois supprimés, aux salaires et aux conditions de travail. Selon le "Bilan social 2019" de la SNCF, 7 000 postes ont été supprimés entre 2017 et 2019.
+
+
+ 
+
+### 2. Quelles sont les gares les plus touchées par les retards au départ ?
+
+Après avoir examiné la première question, on a cherché à identifier les gares les plus touchées par les retards au départ entre 2019 et 2020. Pour ce faire, on a calculé le temps moyen de retard pour chaque gare, puis présenté les dix gares les plus touchées sur le graphique.
+
+ 
+
+**De 2019 à 2020**
+
+ 
+
+```{r echo=FALSE}
+tr20 <- Trains %>%
+  filter(Year > 2018) %>%
+  group_by(`Departure station`) %>% 
+  summarise(mean_dept = mean(`Average delay of late departing trains (min)`, na.rm = T)) %>% 
+  arrange(desc(mean_dept)) %>% 
+  mutate(idx = row_number())
+
+
+plot1 <- ggplot(tr20, aes(x = `Departure station`, y = mean_dept, fill = mean_dept)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "orange", high = "red", limits = c(0, 120)) +
+  xlab("Gare de départ") +
+  ylab("Temps moyen du retard (min)") +
+  scale_y_continuous(limits = c(0, 120))+
+  ggtitle("Le temps moyen du retard au départ") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(subtitle = "De 2019 à 2020", fill = "Temps moyen 
+       du retard (min)") +
+  labs(caption = "Université Paris Nanterre DES 22/23
+       Projet collaboratif") +
+  transition_states(idx, transition_length = 50, state_length = 50)
+
+top10 <- plot1 + 
+  scale_x_discrete(limits=c("GRENOBLE","SAINT ETIENNE CHATEAUCREUX", "QUIMPER", "ANNECY",
+                            "DOUAI", "BREST", "TOURCOING", "NANTES", "RENNES","PARIS NORD"))+ 
+  shadow_mark(alpha = 0.7, size = 5) +
+  ease_aes('elastic-in')
+
+animate(top10, nframes = 60, fps = 1.5)
+
+```
+
+```{r echo=FALSE}
+tr20
+```
+
+On a constaté que parmi les 58 gares de départ, Grenoble est la plus touchée par les retards, avec un temps moyen de retard de 106 minutes, suivie de Saint-Etienne-Châteaucreux (60.8 min), puis de Quimper (41,3 min).
+
+ 
+
+**De 2015 à 2018**
+
+ 
+
+```{r echo=FALSE}
+tr21 <- Trains %>%
+  filter(Year < 2019) %>%
+  group_by(`Departure station`) %>% 
+  summarise(mean_dept = mean(`Average delay of late departing trains (min)`, na.rm = T)) %>% 
+  arrange(desc(mean_dept)) %>% 
+  mutate(idx = row_number())
+
+plot2 <- ggplot(tr21, aes(x = `Departure station`, y = mean_dept, fill = mean_dept)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue", limits = c(0, 120)) +
+  xlab("Gare de départ") +
+  ylab("Temps moyen du retard (min)") +
+  scale_y_continuous(limits = c(0, 120))+
+  ggtitle("Le temps moyen du retard au départ") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(subtitle = "De 2015 à 2018", fill = "Temps moyen 
+       du retard (min)") +
+  labs(caption = "Université Paris Nanterre DES 22/23
+       Projet collaboratif") +
+  transition_states(idx, transition_length = 50, state_length = 50)
+
+top10_2 <- plot2 + 
+  scale_x_discrete(limits=c("MONTPELLIER", "QUIMPER", "PARIS NORD", "VALENCE ALIXAN TGV", "NIMES", 
+                            "ITALIE", "PARIS EST", "PARIS LYON", "VANNES", "LE MANS"))+ 
+  shadow_mark(alpha = 0.7, size = 5) +
+  ease_aes('elastic-in')
+
+animate(top10_2, nframes = 60, fps = 1.5)
+```
+
+```{r echo=FALSE}
+tr21
+```
+
+Cependant, en comparant les temps moyens de retard avant 2019, on observe des barres plus basses que dans le premier graphique. De plus, les temps de retard de chaque gare sont dispersés de manière similaire. La gare la plus touchée est Montpellier (21 minutes) et deux gares se classent dans le Top 10 pour toutes les années (Quimper et Paris Nord).  
+
+**Temps moyen du retard de toutes les gares**
+
+```{r include=FALSE}
+mean(tr20$mean_dept)
+mean(tr21$mean_dept)
+sd(tr20$mean_dept)
+sd(tr21$mean_dept)
+```
+
+*Temps moyen du retard :* **15.2** *(2015-2018),* **11.4** *(2019-2020)*
+
+*Écart-type :* **3.1** *(2015-2018),* **16.3** *(2019-2020)*
+
+Mais, il est intéressant de noter que le temps moyen de retard entre 2015 et 2018 est plus élevé que celui observé en 2019 et 2020. Cela indique que les grèves et la pandémie de Covid-19 ont eu un impact important sur certaines gares, telles que Grenoble et Quimper, mais pas sur l'ensemble des gares. C'est pourquoi l'écart-type des données après 2019 est beaucoup plus grand que celui observé avant cette année-là.
+
+ 
+
+# III. Analyse des fréquences
+
+### 1. Quel est le trajet le plus fréquenté par an ?
+
+Comparons la ligne la plus fréquentée de chaque année avec les autres années.
+
+```{r include=FALSE}
+max_freq_15 <- Trains %>%
+  mutate(number_trains = `Number of expected circulations` - `Number of cancelled trains`) %>%
+  arrange(-number_trains) %>%
+  filter(`Year` == "2015") %>%
+  select(`Year`, `Month`, `Departure station`, `Arrival station`, `number_trains`) %>%
+  slice(1:1)
+
+max_freq_16 <- Trains %>%
+  mutate(number_trains = `Number of expected circulations` - `Number of cancelled trains`) %>%
+  arrange(-number_trains) %>%
+  filter(`Year` == "2016") %>%
+  select(`Year`, `Month`, `Departure station`, `Arrival station`, `number_trains`)  %>%
+  slice(1:1)
+
+max_freq_17 <- Trains %>%
+  mutate(number_trains = `Number of expected circulations` - `Number of cancelled trains`) %>%
+  arrange(-number_trains) %>%
+  filter(`Year` == "2017") %>%
+  select(`Year`, `Month`, `Departure station`, `Arrival station`, `number_trains`) %>%
+  slice(1:1)
+
+max_freq_18 <- Trains %>%
+  mutate(number_trains = `Number of expected circulations` - `Number of cancelled trains`) %>%
+  arrange(-number_trains) %>%
+  filter(`Year` == "2018") %>%
+  select(`Year`, `Month`, `Departure station`, `Arrival station`, `number_trains`) %>%
+  slice(1:1)
+
+max_freq_19 <- Trains %>%
+  mutate(number_trains = `Number of expected circulations` - `Number of cancelled trains`) %>%
+  arrange(-number_trains) %>%
+  filter(`Year` == "2019") %>%
+  select(`Year`, `Month`, `Departure station`, `Arrival station`, `number_trains`) %>%
+  slice(1:1)
+
+max_freq_20 <- Trains %>%
+  mutate(number_trains = `Number of expected circulations` - `Number of cancelled trains`) %>%
+  arrange(-number_trains) %>%
+  filter(`Year` == "2020") %>%
+  select(`Year`, `Month`, `Departure station`, `Arrival station`, `number_trains`) %>%
+  slice(1:1)
+
+total_max_freq <- rbind(max_freq_15, max_freq_16, max_freq_17, max_freq_18, max_freq_19, max_freq_20)
+total_max_freq
+```
+
+Entre 2015 et 2020, la connexion entre Paris et Bordeaux a été la plus nombreuse. On remarque aussi une forte offre de trains sur l'été et sur le moment des vacances scolaires et des fêtes de fin d'année. A partir de 2017, le nombre de trains mensuel partant de Bordeaux en direction de Paris a augmenté de plus de 150.
+
+ 
+
+### 2. La fréquentation est-elle plus importante en été ou en hiver ?
+
+Créons une colonne "saison" pour réunir les mois de janvier et décembre en hiver et ceux de juillet et août en été.
+
+```{r echo=FALSE}
+freq_ete_hiver <- Trains %>%
+  mutate(Month = as.numeric(Month)) %>%
+  mutate(saison = case_when(
+    Month == 1 | Month == 12 ~ "Hiver",
+    Month == 7 | Month == 8 ~ "Ete",
+    TRUE ~ "Other"
+  )) %>%
+  arrange(-number_trains) %>%
+  group_by(saison) %>%
+  filter(saison == "Ete" | saison == "Hiver") %>%
+  select(Year, saison, `Departure station`, `Arrival station`, number_trains) %>%
+  ggplot() +
+  aes(x = Year, y = number_trains, color = saison) +
+  geom_point(shape = "circle", size = 1.2, alpha = 0.2, position = "jitter") +
+  scale_color_paletteer_d("basetheme::ink") +
+  labs(x = "Année", y = "Nombre de trains", title = "Le nombre de trains selon l'année et la saison", color = "Saison") +
+  theme_minimal()
+
+ggplotly(freq_ete_hiver)
+
+```
+
+Chaque année, on peut apercevoir un "foyer" en hiver aux alentours de 250 trains mais certaines lignes proposent une dizaine de trains par mois tandis que d'autres plus de 600. En été, le "foyer" de concentration semble un peu plus élargi: entre 100 et 350. Seules les années 2017 à 2019 dépassent le pallier de 750 trains mensuels. En 2020 cependant, aucun train d'été n'est représenté puisque le jeu de données ne comprend pas ces mois-là.
+
+Sur les deux périodes (été et hiver), l'offre est plus conséquente pour les trajets reliant Paris à Bordeaux comme vu précédemment par année. Davantage de trains circulent en décembre et en janvier qu'en été, sûrement à cause des fêtes de fin d'années. Le train est peut être moins fréquenté en été puisque les individus favoriseraient des trajets de plus longue distance (par avion par exemple).
+
+ 
+
+# Conclusion
+
+Excluant les données atypiques, ce jeu de données de la SNCF offre différents types de données qui permettent plusieurs analyses. Dans notre projet, nous avons étudié la corrélation entre la durée des trains et le taux de retard après des analyses générales. Contrairement à nos prévisions, on n'a pas observé de corrélation significative entre les deux variables, mais on a découvert une corrélation positive entre l'année et le taux de retard. La forte augmentation du taux de retard depuis 2019 peut être liée aux grèves et au Covid-19. Cette tendance est également remarquée dans la comparaison entre les données d'après 2019 et celles d'avant 2019. Ce qui est intéressant, c'est que le retard a eu un grand impact sur certaines gares comme Grenoble, mais pas sur l'ensemble des lignes. On a prouvé ce résultat en calculant la moyenne et l'écart type des temps de retard. Dans l'analyse de la fréquence, on a remarqué que le trajet entre Bordeaux et Paris est le plus fréquenté chaque année. De plus, on a également montré la fréquence saisonnière en séparant la période de l'été et celle de l'hiver, car la période des vacances influence la fréquence des trains.
+
+En conclusion, on a découvert comment les trajets sont impactés par le retard et par la saison. Si la SNCF utilise d'autres données, telles qu'un jeu de données sur le taux de vente des billets ou une enquête sur la satisfaction des voyageurs, elle pourrait réfléchir à des options alternatives pour les gares les plus touchées par le retard ou à la façon de contrôler le nombre de trains selon la période.
+
+ 
+
+**Enseignant : Monsieur Dario Compagno**
+
