@@ -1,0 +1,193 @@
+---
+title: "Films originaux Netflix & IMDB Analyse"
+author: "Hanjoon Ko"
+date: "2023-04-23"
+output: 
+ html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(readr)
+library(skimr)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(ggforce)
+library(plotly)
+library(htmlwidgets)
+library(png)
+library(grid)
+library(gifski)
+library(gganimate)
+library(car)
+
+Netflix <- read_excel("~/netflix_year.xlsx")
+
+```
+
+
+```{r echo=FALSE}
+Netflix <- Netflix %>%
+  mutate(Language2 = fct_collapse(Language,
+                                  Anglais = c("English/Japanese", "English", "English/Spanish", "English/Swedish", 
+                                              "English/Taiwanese/Mandarin", "Thia/English", "English/Mandarin", "Khmer/English/French", "English/Hindi", 
+                                              "Spanish/English", "English/Korean", "English/Arabic", "English/Russian", "English/Akan", "English/Ukranian/Russian"),
+                                  "Langues européennes" = c("Dutch", "French", "Georgian", "German", "Norwegian", "Polish", "Portuguese", "Spanish/Basque",
+                                               "Spanish/Catalan", "Swedish", "Spanish", "Italian"),
+                                  "Langues asiatiques" = c("Bengali", "Tamil", "Thai", "Filipino", "Hindi", "Indonesian", "Japanese", "Korean", "Malay",
+                                                "Marathi", "Turkish"))) %>%
+  filter(!Genre %in% c("Documentary", "Concert Film", "One-man show")) %>%
+  filter(Runtime > 60) %>%
+  filter(Runtime < 209)
+
+Netflix$`IMDB Score` <- as.numeric(Netflix$`IMDB Score`)
+```
+
+&nbsp;
+
+# Introduction
+
+Depuis 2015, Netflix produit ses propres films, appelés "Netflix Originals". Lorsque la Fédération nationale des cinémas français (FNCF) a refusé la sortie de deux films originaux de Netflix, "Okja" de Bong Joon-ho et "The Meyerowitz Stories" de  Noah Baumbach en 2017, pour des raisons de protection pour le marché cinématographique français, les utilisateurs ont commencé à percevoir les contenus originaux de Netflix et la production de films a aussi augmenté rapidement. Bien que les films Netflix ne soient pas encore sortis dans les cinémas français et ne soient pas invités à Cannes après cette année, de nombreux films ont remporté des prix d’Oscars du cinéma et ont été appréciés par ses 231 millions d'abonnés.
+
+A travers cette tendance déjà normale, on vise à analyser le caracteristique des films de Netflix en utilisant le classement d'IMDB. Bien qu'il existe plusieurs critères pour évaluer la qualité d'un film, nous allons utiliser le score IMDB comme critère principal. Dans cette analyse, nous avons d'abord visualisé la relation entre la durée du film et le score IMDB sous forme d'un nuage de points, puis nous avons observé la relation entre la langue du film et le score en utilisant des boxplots et des jitters. Enfin, nous avons terminé notre analyse en représentant la relation entre les trois types de variables à travers un graphique en 3D. Le jeu de données utilisées a été obtenue sur Kaggle [(Data source)](https://www.kaggle.com/datasets/luiscorter/netflix-original-films-imdb-scores?select=NetflixOriginals.csv), et nous avons exclu les courts-métrages de moins de 60 minutes, les documentaires, les films de concert et les one-man-shows de toutes les analyses.
+
+&nbsp;
+
+# 1. Plotly
+## Durée - Score
+
+&nbsp;
+
+```{r echo=FALSE}
+line <- lm(Netflix$`IMDB Score` ~ Netflix$Runtime)
+```
+```{r echo=FALSE}
+viz1 <- ggplot(Netflix) +
+  aes(x = Runtime, y = `IMDB Score`, colour = `IMDB Score`, tooltip = Title) +
+  geom_point(shape = "circle", 
+             size = 5L, alpha = 0.8) +
+  scale_color_viridis_c(option = "viridis", direction = 1) +
+  labs(title = "La durée de film et le score d'IMDB", 
+       color = "Score", x = "Durée (min)", y = "IMDB Score (sur 9.0)",
+       text =  paste("Title:", "Titre")) +
+  annotate("text", x = 150, y = 2.2, 
+           label = "UPN DES 22/23", 
+           color = "black", size = 3) +
+  ggthemes::theme_hc() +
+  geom_abline(intercept = coef(line)[1], slope = coef(line)[2], color = "red") +
+  geom_text(aes(label = ifelse(`IMDB Score` > 7.7, as.character(Title),'')),hjust=0,vjust=20, 
+            color = "black", alpha = 0.7, family = "AppleGothic")
+
+```
+```{r echo=FALSE}
+ggplotly(viz1, tooltip = c("x","y","Title"))
+```
+
+&nbsp;
+
+**Coefficient de corrélation**
+```{r echo=FALSE}
+cor(Netflix$Runtime, Netflix$`IMDB Score`, method = "pearson")
+```
+
+&nbsp;
+
+Les axes X et Y représentent respectivement la durée du film et le score IMDB. Les films ayant un score le plus élevé sont représentés par des points jaunes. En survolant les points avec la souris, il est possible d'afficher le titre, la durée et le score du film correspondant. La ligne rouge représente une régression linéaire qui montre une relation positive faible entre les deux variables. Le coefficient de corrélation de Pearson est de 0,2, indiquant une corrélation légèrement positive entre les deux variables.
+
+&nbsp;
+
+# 2. Boxplot & Jitter
+## Langue - Score
+
+&nbsp;
+
+```{r echo=FALSE}
+ggplot(Netflix)+
+  aes(x = Language2, y=`IMDB Score`, color =Language2) +
+  geom_boxplot(fill="#F5F5DC", color="#696969", alpha=0.6)+
+  geom_jitter(size=3.2, alpha = 0.35) +
+  scale_color_manual(values = c("#3E4A89FF", "#1F9D8AFF", "#FFD700")) +
+  ggthemes::theme_hc() +
+  ggtitle("IMDB Score par la langue") +
+  theme(plot.title = element_text(face = "bold")) +
+  labs(y = "IMDB Score (sur 9.0)", x="",color = "Langue") +
+  stat_summary(fun = mean, 
+               geom = "point", 
+               shape = 23, 
+               size = 5, 
+               fill = "white", 
+               color = "black")+
+  theme(legend.position = "right")
+
+```
+
+&nbsp;
+
+**ANOVA**
+
+```{r include=FALSE}
+langue_anova <- aov(Netflix$`IMDB Score` ~ Netflix$Language2)
+shapiro.test(langue_anova$residuals)
+leveneTest(Netflix$`IMDB Score` ~ Netflix$Language2)
+```
+
+```{r echo=FALSE}
+
+summary(langue_anova)
+```
+
+&nbsp;
+
+L'axe X représente la langue du film et l'axe Y représente le score IMDB. Étant donné le grand nombre de langues dans le jeu de données d'origine, nous avons regroupé les langues en trois catégories : les langues asiatiques, les langues européennes et l'anglais. Nous avons séparé l'anglais en une catégorie distincte car le nombre de films en anglais est nettement supérieur au nombre de films en toute autre langue européenne. Il y a 249 films en anglais et 72 films en langues européennes. Sur ce graphique, nous avons également indiqué la moyenne des scores et nous pouvons observer que la moyenne des films en anglais est la plus élevée (6,1). Néanmoins, seleon le résumé d'ANOVA, on ne voit pas la relation entre les deux variables (p-value = 0,07).
+
+&nbsp;
+
+# 3. 3D Bubble Plot
+## Durée - Langue - Score
+
+
+```{r echo=FALSE}
+colors <- c("#3E4A89FF", "#1F9D8AFF", "#FDE725FF")
+
+plot_ly(Netflix, x = ~Language2, y = ~Runtime, z = ~`IMDB Score`, color = ~Language2,
+        colors = colors, type = "scatter3d", mode = "markers", marker = list(symbol = 'circle', size = ~`IMDB Score`*3, opacity = 0.5),
+        showlegend = F) %>%
+  add_markers(hoverinfo = "text",
+              text = ~paste("Title:", Title, "<br>",
+                            "Genre:", Genre, "<br>",
+                            "Runtime: ", Runtime, " min", "<br>",
+                            "Language: ", Language2, "<br>",
+                            "IMDB Score: ", `IMDB Score`, "<br>"
+              )) %>%
+  layout(scene = list(xaxis = list(title = ""), 
+                      yaxis = list(title = "Durée (min)"), 
+                      zaxis = list(title = "IMDB Score (sur 9.0)")),
+         title = list(text = "Durée - Langue - IMDB Score", face = "bold"),
+         margin = list(l = 0, r = 0, b = 0, t = 80)) %>%
+  add_annotations(
+    x = "",
+    y = 120,
+    z = 8,
+    text = "        
+    UPN DES 22/23",
+    showarrow = TRUE,
+    arrowhead = 7,
+    ax = 0,
+    ay = -30
+  )
+```
+
+Les trois axes représentent respectivement la durée, la langue et le score du film. Les différentes langues sont représentées par des couleurs et toutes les informations relatives à un film peuvent être affichées en survolant le point correspondant avec la souris. À partir de ce graphique, nous pouvons observer que le nombre de films en anglais est le plus élevé et que la relation positive faible entre la durée et le score observée dans le premier graphique est également visible ici.
+
+&nbsp;
+
+# Conclusion
+
+Nous avons observé une relation positive légère entre la durée et le score d'IMDB, mais pas entre la langue du film et son score d'IMDB. Même pour la première analyse, nous ne pouvons pas établir une relation de causalité à partir de ces résultats, car la corrélation ne prouve pas la causalité. Néanmoins, ces résultats peuvent aider Netflix à prévoir qu’un film plus long pourrait obtenir une meilleure note, ce qui pourrait être pris en compte pour leurs futures productions de films. De plus, même s'il n'y a pas de relation entre la langue et le score, le film en anglais semble une tendance mondiale.
