@@ -1,0 +1,347 @@
+---
+title: "Analyse de GCBS (Generic Conspiracist Beliefs Scale)"
+subtitle: "Première partie"
+author: "Hanjoon Ko"
+date: "`r Sys.Date()`"
+output: 
+ html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+---
+
+* UPN M2 DES 23/24
+* Auteur : Hanjoon Ko
+* Les questionnaires GCBS: https://openpsychometrics.org/tests/GCBS/
+* Producteur originaire : Département de psychologie, Université Goldsmiths
+
+# Introduction
+
+Dans le monde de Youtube, il y a plusieurs de chaînes de musique du jazz tels que « Sunday Morning Jazz », « Night Newyork Jazz Music » et « Warm Jazz Music to Studying ». Le week-end, le matin, j’accède à Youtube et recherche « jazz » pour écouter la musique avec mon petit-déjeuner. Comme la chaîne est en direct, les utilisateurs peuvent commentaire sur la chaîne et communiquer avec d’autres amateurs de la musique. Les commentaires sont généralement « Bonjour », « Hello from Roumania », « Buenas noches. Hora de dormir. Hasta manana » et cetera. Mais, il y a deux semaines, lors que j’ai pris un croissant avec la musique, j’ai vu un commentaire qui disait « THE EARTH IS FLAT ».
+
+Selon David Aaronovitch, un journaliste et auteur anglais, la croyance de conspirationnistes est « l'assomption inutile d'un complot lorsque d'autres explications sont plus probables » (*Voodoo Histories: the role of Conspiracy Theory in Modern History (2009)*). Des théories de complot comme Mark Jukerberg est un reptillien ou le terror tragique du 11 septembre s’est organisé par le gouvernement américain attirent toujours l’attention surtout par les gens n'ayant pas la confiance du régime présent. La majorité des citoyens ne savent pas la vie d’ultrariche ou de la maison blanche qui est cachée, et en raison de désir des humains de trouver une causalité sur un effet, les théories de complot qui explique un effet mystère (ex. le succès énorme de Jukerberg ou l’accident incompréhensible du 11 septembre) par une cause incertaine, mais plausible sont bien vendus.
+
+Étant donné qu'un conspirationniste extrême peut donner une grande confusion dans le monde, l'équipe de recherche du département de psychologie à l’Université Goldsmiths a créé un baromètre qui s’appelle GCBS (Generic Conspiracist Beliefs Scale) pour mieux comprendre les conspirationnistes . Dans cette analyse, nous allons examiner les questions les uns les autres pour constater leurs corrélations, et si ce baromètre est efficace pour identifier un conspirationniste.
+
+
+# I. Analyse sommaire
+
+```{r include=FALSE}
+
+library(skimr)
+library(readr)
+library(FactoMineR)
+library(factoextra)
+library(ggrepel)
+library(explor)
+library(missMDA)
+library(cluster)
+library(missMDA)
+library(rpart)
+library(rpart.plot)
+library(randomForest) 
+library(party)
+library(modelr)
+library(plotly)
+library(ppcor)
+library(dagitty)
+library(tidyverse)
+data_complot <- read_csv("~/data_complot.csv")
+```
+
+
+
+
+```{r echo=FALSE}
+skim(data_complot)
+```
+
+Il y a 2 495 réponses et 72 colonnes dans ce jeu de données. 71 colonnes sont quantitatives et une seule colonne est qualitative ('major'). Dans le test, les participants ont répondu à 15 questions et le temps employés sur chaque question est mesuré. Le temps employé sur la lecture de l'introduction, sur le test entier et sur les questions personnelles est également enregistré. Pour catégoriser les caractéristiques des participants, il y a 10 questions pour s'évaluer de 'Disagree strongly' à 'Agree strongly'. Seize colonnes de VCL concernent leur connaissances des mots anglais. Les participants cochent les cases, s'ils comprennent chaque mot. Si oui, un point; sinon, zéro point. Sur les autres colonnes, l'investigateur demande du niveau de l'éducation, l'urbanisation, le genre, la langue maternelle (anglais ou non), l'âge, l'usage de main (la droite ou la gauche), la religion, l'orientation sexuelle, la race, la participation de vote, le mariage, la taille de famille et la spécialité des études. Sauf les 15 premières  questions, il n'est pas obligatoire de répondre à toutes les autres.  
+
+**Nettoyage de données (âge)**  
+Sur la colonne de l'âge, la valeur maximale est 33 769 qui dit qu'il y a sûrement des faux données. Donc on supprime les lignes celles qui one de plus de 200 ans. Avec le filtre, nous allons continuer notre analyse avec des données des participants qui ont de 13 ans à 75 ans.
+
+```{r include=FALSE}
+data_complot <- data_complot %>% filter(data_complot$age < 200)
+```
+
+* * *
+# II. Analyse des réponses avec les questions supplémentaires
+
+### Objectif
+Le but de cette partie est pour analyser les réponses des 15 questions qui sont inventées pour identifier un conspirationniste. De quoi parlent-elles, et comment souvent un même type (sujet) de questions sont-elles demandées ? Quelle question est plus cruciale que les autres afin d'identifier un conspirationniste. A quelle question les conspirationnistes ont-ils réagit le plus ? Pour répondre ces questions, on met les colonnes de questions (Q1-Q15) aux variables actives, et pour mieux comprendre les réponses de chaque participant, nous verrons les questions personnelles en tant que les variables supplémentaires. 
+
+### Méthode
+
+Pour répondre à nos questions, nous utilisons la méthode AFC (l'analyse factoriel des correspondances) qui montre la corrélation entre les variables. Vu que les variables actives sont toutes quantitatives (le score de 1 à 5), on a choisi la PCA (Principal Component Analysis en anglas), un type de AFC. Pour les variables supplémentaires, nous choisissons 'education', 'urban', 'gender', 'engnat (si sa langue maternelle est l'anglais)', 'age', 'hand (la droite, la gauche ou les deux)', 'religion', 'orientation (sexuelle)', 'race', 'voted (Avez-vous voté dans le temps passé ?)', 'married' et 'family size (Avez-vous combien de frère ou sœur?)'. Sauf les colonnes 'age' et 'family size', toutes les variables sont catégoricales, parce que les réponses comme 'Male', 'Female', 'Yes', 'Christian (Catholic)' sont toutes vectorisées au nombre (ex. Male:1, Female:2, Other:3). 
+
+### Étape
+En premier lieu, nous sélectionnons les colonnes de réponses (Q1-Q15) et les questions supplémentaires (12 dernières questionss quantitatives).
+
+```{r include=FALSE}
+complot_q_others <- data_complot %>% dplyr::select(1:15,60:71)
+```
+
+En deuxième, on applique la PCA aux réponses, les variables actives, et aux questions personnelles, les variables supplémentaires en utilisant 'quanti.sup'. Tout d'abord, les 15 questions sont ci-dessous.
+
+![](C:/Users/Ko/OneDrive/Nanterre/M2-S1/Analyse de données/Complot/Questions.jpg)
+<br />
+1. The government is involved in the murder of innocent citizens and/or well-known public figures, and keeps this a secret.  
+2. The power held by heads of state is second to that of small unknown groups who really control world politics.						
+3. Secret organizations communicate with extraterrestrials, but keep this fact from the public.  
+4. The spread of certain viruses and/or diseases is the result of the deliberate, concealed efforts of some organization.						
+5. Groups of scientists manipulate, fabricate, or suppress evidence in order to deceive the public.  
+6. The government permits or perpetrates acts of terrorism on its own soil, disguising its involvement.  
+7. A small, secret group of people is responsible for making all major decisions, such as going to war.  
+8. Evidence of alien contact is being concealed from the public.						
+9. Technology with mind-control capacities is used on people without their knowledge.						
+10. New and advanced technology which would harm current industry is being suppressed.						
+11. The government uses people as patsies to hide its involvement in criminal activity.  
+12. Certain significant events have been the result of the activity of a small group who secretly manipulate world events.  
+13. Some UFO sightings and rumours are planned or staged in order to distract the public from real alien contact.  
+14. Experiments involving new drugs or technologies are routinely carried out on the public without their knowledge or consent.  
+15. A lot of important information is deliberately concealed from the public out of self-interest.
+
+
+<br />
+
+
+
+
+### Résultat
+```{r include=FALSE}
+pca_q_others <- PCA(complot_q_others, quanti.sup = 16:27)
+```
+```{r echo=FALSE, warning=FALSE}
+fviz_pca_biplot(pca_q_others, repel = TRUE)
+fviz_pca_var(pca_q_others, repel = TRUE, max.overlaps = 50, figsize = c(12,8))
+
+```
+
+
+
+En analysant le deuxième graphe ('Variables - PCA'), nous pouvons voir que les questions 3, 8 et 13 sont très associées les unes aux autres, toutes portant sur l'existence des extraterrestres. Par ailleurs, toutes les flèches sont assez éloignées du centre, ce qui indique que toutes les questions sont importantes pour identifier un conspirationniste.
+
+En raison de l'angle orthogonal, on peut voir que la question 15, qui concerne l'information intentionnellement cachée, n'a pas trop de relation avec les trois questions sur les extraterrestres. La question 9 (technologie utilisée de manière immorale) se situe au milieu, ce qui montre qu'elle est plus ou moins liée aux 3 questions et aussi aux autres questions. Les questions situées entre Q3 et Q15 sont plus liées à la question 15 qu'aux questions sur les extraterrestres, parce qu'elles sont plus proches à la Q15. Pour les variables supplémentaires, on peut constater que le genre ('gender') a une corrélation avec Q3, Q8, Q13, et qu'une corrélation négative entre l'éducation et les trois questions. L'impact de ces deux questions personnelles semble être faible, mais nous essayons d'examiner en détail la corrélation de ces questions. 
+
+ <br />
+ 
+## II-1 Analyse supplémentaire des questions Q3/Q8/Q13 par genre
+```{r echo=FALSE}
+complot_q_others_genre <- complot_q_others %>% dplyr::select(3,8,13,18)
+```
+
+```{r echo=TRUE}
+sum(complot_q_others$gender == 0)
+```
+En premier lieu, nous avons choisi les colonnes de Q3/Q8/Q13 et de genre. Pour répondre à leur genre, ils ont trois choix : homme, femme et autre. Comme il y a 6 lignes de zéro, ce qui indique qu'ils n'ont pas choisi de genre, nous les supprimons.
+
+
+```{r echo=FALSE}
+complot_q_others_genre <- complot_q_others_genre %>% filter(gender >0)
+
+result1 <- complot_q_others_genre %>% 
+            group_by(gender) %>%
+            summarize(mean_Q3 = mean(Q3),
+            mean_Q8 = mean(Q8),
+            mean_Q13 = mean(Q13))
+result1 <- result1 %>%
+            mutate(mean = (mean_Q3 + mean_Q8 + mean_Q13)/3 )
+result1
+```
+
+Pour calculer le score moyen de chaque genre, nous avons regroupé les lignes par genre et calculé la moyenne pour chaque question. Pour la dernière colonne, nous avons ajouté une colonne de la valeur moyenne du total des trois questions. En observant la colonne 'mean' dans le tableau, on peut constater que le genre 2 (femme) et le genre 3 (autre) sont plus en accord avec l'existence des extraterrestres que le genre 1 (homme). Cependant, étant donné que le score de '3' correspond à la réponse 'Neutral' entre 'Disagree' et 'Agree', les scores moyens pour les femmes et les autres genres sont plutôt proches de 'disagree', niant ainsi l'existence des extraterrestres. Par conséquent, bien qu'il y ait des différences de réponse pour ces trois questions entre les genres, leur impact n'est pas assez fort pour identifier un croyant en l'existence des extraterrestres. C'est pourquoi la flèche du 'gender' sur le graphique de PCA n'est pas assez éloignée du centre.
+
+```{r echo = FALSE}
+cor(complot_q_others_genre)
+pairs(complot_q_others_genre, panel= panel.smooth, main= "Questions d'extraterrestre et le genre")
+```
+
+<br />
+
+Selon ce nuage de points, on peut voir plus clairement que les trois questions sont fortement associées, car les lignes dans le graphique sont toutes positives, et les valeurs de corrélation sont supérieures à 0.7. Cependant, en ce qui concerne le genre, les lignes sont faiblement positives ou même plates, ce qui indique une corrélation faible entre le genre et les trois questions.
+
+
+![](C:/Users/Ko/OneDrive/Nanterre/M2-S1/Analyse de données/Complot/questions_score_5.png)
+
+*(Exemple du score de questions)*
+  
+<br />
+
+## II-2 Analyse supplémentaire des questions Q3/Q8/Q13 par éducation
+
+Dans le graphique de PCA, nous avons indiqué que les variables de la colonne d'éducation ont une corrélation négative avec les questions sur les extraterrestres. Tout comme pour le genre, la flèche représentant l'éducation sur le graphe de PCA n'est pas assez éloignée du centre. Nous pouvons prévoir que l'impact de l'éducation sur le score de Q3/Q8/Q13 ne sera pas très significatif, mais nous le vérifierons ci-dessous. 
+
+```{r echo=TRUE}
+sum(complot_q_others$education == 0)
+```
+Il y a 38 personnes qui n'ont pas répondu à la question d'éducation. On les supprime avant de continuer l'analyse.
+
+```{r echo=FALSE}
+complot_q_others_education <- complot_q_others %>% dplyr::select(3,8,13,16)
+complot_q_others_education <- complot_q_others_education %>% filter(education >0)
+
+result2 <- complot_q_others_education %>% 
+            group_by(education) %>%
+            summarize(mean_Q3 = mean(Q3), mean_Q8 = mean(Q8), mean_Q13=mean(Q13)) %>%
+            mutate(mean = (mean_Q3+mean_Q8+mean_Q13)/3)
+result2
+```
+
+Pour indiquer le niveau d'éducation, il y a quatre choix : 1 (Moins de lycée), 2 (Lycée), 3 (Licence) et 4 (Master). Ainsi, si le chiffre dans la colonne d'éducation est élevé, cela signifie qu'il a un niveau d'éducation élevé.
+
+Sur le tableau, le score moyen des trois questions est calculé pour chaque niveau d'éducation. On peut observer que plus le niveau d'éducation est élevé, moins le score des trois questions est élevé, ce qui indique que davantage de personnes moins éduquées croient en l'existence des extraterrestres. Comme le niveau d'éducation est inversement proportionnel au score moyen, on peut constater la corrélation négative entre les deux variables. Cependant, à l'instar du genre, étant donné que tous les scores sont inférieurs à 3 (Neutral), on ne peut affirmer qu'il existe une forte corrélation négative.
+
+```{r echo = FALSE}
+cor(complot_q_others_education)
+pairs(complot_q_others_education, panel= panel.smooth, main= "Questions d'extraterrestre et l'éducation")
+```
+
+<br />
+
+Avec un scatterplot, on peut voir cette corrélation plus clairement. Les lignes qui représentent la relation entre Q3, Q8 et Q13 sont toutes positives et fortes. Cependant, les lignes liées à 'education' sont toutes négatives et faibles. Dans le tableau de corrélation entre les quatre, la valeur de corrélation entre les trois questions soit supérieure à 0.7, mais la valeur avec l'éducation est inférieure à zéro (-0.1).
+
+
+
+* * *  
+
+# III. Analyse des caractères (TIPI)
+
+### Objectif
+Le caractère est l'un des éléments importants pour définir une personne. Selon son caractère, il ou elle pense de manière différente et agit différemment. Dans cette analyse, nous examinons comment le GCBS a catégorisé les caractères humains et quels caractères les participants présentent. 
+
+![](C:/Users/Ko/OneDrive/Nanterre/M2-S1/Analyse de données/Complot/ex_tipi.png)
+
+### Méthode
+Étant donné que les variables de caractères sont également vectorisées sur une échelle de 7 (de 'Disagree strongly' à 'Agree strongly'), nous utilisons la PCA pour les analyser. Avec la PCA, nous avons clairement identifié 4 catégories de caractères. Par conséquent, nous tentons de les regrouper en utilisant les analyses DIANA et HCPC.
+
+### Étape
+
+En examinant les résultats de la fonction skim, on constate la présence de valeurs nulles indiquant des réponses non cochées. Nous les supprimons afin d'analyser les TIPI de manière plus précise.
+```{r echo=FALSE}
+complot_tipi <- data_complot %>% dplyr::select(34:43)
+skim(complot_tipi)
+```
+
+```{r echo=FALSE}
+complot_tipi <- complot_tipi %>%
+                filter(TIPI1 > 0, TIPI2 > 0, TIPI3 > 0, TIPI4 > 0, TIPI5 > 0, TIPI6 > 0, TIPI7 > 0, TIPI8 > 0, TIPI9 > 0, TIPI10 > 0)
+```
+Avant d'appliquer le PCA, voyons comment le test GCBS a divisé le caractère en 10.
+
+• TIPI1 : Extraverted, enthusiastic  
+• TIPI2 : Critical, quarrelsome  
+• TIPI3 : Dependable, self-disciplined  
+• TIPI4 : Anxious, easily upset  
+• TIPI5 : Open to new experiences, complex  
+• TIPI6 : Reserved, quiet  
+• TIPI7 : Sympathetic, warm  
+• TIPI8 : Disorganized, careless  
+• TIPI9 : Calm, emotionally stable  
+• TIPI10 : Conventional, uncreative
+
+
+### Résultat
+
+<br />
+
+#### PCA
+
+```{r include=FALSE}
+pca_tipi <- PCA(complot_tipi)
+```
+```{r echo=FALSE}
+fviz_pca_biplot(pca_tipi, repel = TRUE)
+fviz_pca_var(pca_tipi, repel = TRUE, col.var = "contrib", figsize = c(12,8))
+
+```
+
+Sur le graphe de PCA, on peut clairement catégoriser les 10 caractères en 4 :  
+1) TIPI1, TIPI5, TIPI7 (Extraverted, Open to new experiences, Sympathetic)  
+2) TIPI9, TIPI3 (Calm, Dependable)  
+3) TIPI6, TIPI10 (Reserved, Conventional)  
+4) TIPI2, TIPI4, TIPI8 (Critical, Anxious, Disorganized)
+
+<br />
+
+#### Corrélation entre les TIPIs
+
+```{r echo=TRUE}
+cor(complot_tipi$TIPI3, complot_tipi$TIPI1)
+cor(complot_tipi$TIPI10, complot_tipi$TIPI1)
+cor(complot_tipi$TIPI1, complot_tipi$TIPI7)
+```
+
+Ce graphique montre la corrélation entre les 10 types de caractères. Par exemple, une personne qui pense qu'elle est 'Extraverted' croit également qu'elle est 'Open to new experience' et 'Sympathetic'.
+
+L'angle des flèches de chaque groupe est presque orthogonal, soit 180 degrés. Ainsi, il n'y a pas de relation, voire une relation négative, entre les 4 groupes. Par exemple, il y a presque aucune corrélation (0.14) entre TIPI3 et TIPI1 (angle presque orthogonal), et une relation négative est observée (-0.11) entre TIPI10 et TIPI1 avec un angle de 180 degrés. Même si ce n'est pas très grand, on peut observer une corrélation positive (0.26) entre TIPI1 et TIPI7 (même direction).
+
+La couleur des flèches indique la mesure de contribution de chaque TIPI. Les variables qui sont proches du bleu ciel, telles que TIPI1, 9, 6, 4, ont davantage contribué à la création de ce graphique en raison de leur indice pondéré.  
+
+ <br />
+ 
+#### Dimension
+
+```{r echo=FALSE}
+fviz_screeplot(pca_tipi)
+pca_tipi$var$coord
+```
+Comme on peut le voir sur le graphe de PCA, le premier composant (axe X, 'Dim 1') explique 23.8% des variables, et le deuxième explique 17.9%. Ce graphique en barres illustre la différence de proportion d'explication des variables entre les deux premiers composants et les autres. Selon le tableau, TIPI9 est le plus pondéré pour la première dimension, et TIPI1 est le plus pondéré pour la deuxième dimension. C'est pourquoi leurs flèches sont plus longues et leurs couleurs sont plus claires.  
+
+
+<br />
+
+#### Clustérisation (DIANA)
+
+Passons maintenant à la clustérisation. Étant donné qu'il n'y a pas de valeurs manquantes (NA), nous pouvons passer directement à l'analyse de Diana. Nous avons utilisé '4' pour le codage de visualisation de la clustérisation, car nous avons déjà clairement observé que les TIPIs sont regroupés en 4 dans le graphe de PCA. 
+
+```{r echo=FALSE, warning=FALSE}
+complot_tipi %>% diana() -> tipi_diana
+fviz_dend(tipi_diana, k = 4)
+```
+
+Diana (DIvisive ANAlysis) est un type de clustering hiérarchique. Avec Diana, l'analyse commence de la racine aux feuilles, c'est-à-dire qu'on commence par un seul grand cluster et on le divise de manière répétitive jusqu'à ce que les clusters soient suffisamment distincts. Lorsque l'on a défini la valeur 'k' à 4 pour visualiser ce Diana, il semble que les variables soient correctement regroupées en 4 clusters.
+
+<br />
+ 
+#### Clustérisation (HCPC)
+
+```{r echo=FALSE}
+complot_tipi_hcpc <- HCPC(pca_tipi, nb.clust = 4)
+```
+
+HCPC est une abréviation de 'Hierarchical Clustering on Principal Components). Elle est aussi une clustering hiérarchicale par laquelle on peut mettre l'analyse multidimensionnelle comme PCA. Avec HCPC, deux graphiques ont été générés : un dendrogramme et un graphique de clustering. Nous avons choisi d'avoir 4 clusters, mais il est également possible de laisser la machine le déterminer en spécifiant '-1'. Cependant, dans ce cas, le nombre de clusters reste également 4, si la sélection est automatique. Dans le dendrogramme, les variables sont regroupées de manière appropriée en 4 clusters, comme observé déjà dans le graphique de Diana. Dans le deuxième graphique, les variables sont représentées par quatre couleurs différentes. La distribution de chaque couleur est similaire à celle observée dans le graphique de PCA.
+
+```{r echo=FALSE}
+complot_tipi_hcpc$desc.var  
+```
+
+Par la valeur d'"Eta2", on peut identifier les variables qui permettent de mieux différencier les clusters. Entre les 10 TIPI, les valeurs de TIPI1 et TIPI9 sont les plus élevées (0.53), avec la couleur la plus claire dans le graphe de PCA. En ce qui concerne la valeur P, on peut également identifier si les variables sont importantes pour différencier les clusters. Si la valeur est inférieure à 0.001, l'importance est très significative. Ici, toutes les dix valeurs des TIPI ont des valeurs très petites.
+
+En utilisant la valeur de v-test, on peut déterminer quel TIPI est le plus associé à chaque cluster. Nous avons sélectionné les TIPI qui ont les valeurs les plus élevées pour chaque cluster. Les résultats sont les suivants :  
+• Cluster 1 : TIPI4, 8, 10 (Anxious,easily upset/ Disorganized, careless/ Conventional, uncreative)  
+• Cluster 2 : TIPI1, 2  (Extraverted,enthusiastic/ Critical, quarrelsome)  
+• Cluster 3 : TIPI6  (Reserved, quiet)  
+• Cluster 4 : TIPI3, 5, 7, 9 (Open to new experiences,complex/ Sympathetic,warm/ Calm,emotionally stable)  
+
+<br />
+
+#### Création une nouvelle colonne par quatre clusters
+
+```{r echo=FALSE}
+complot_tipi_2 <- complot_tipi_hcpc$data.clust
+complot_tipi_merged <- cbind(complot_tipi,complot_tipi_2)
+complot_tipi_merged <- complot_tipi_merged[,-c(11:20)]
+view(complot_tipi_merged)
+```
+
+```{r echo=FALSE}
+complot_tipi_hcpc$desc.ind
+```
+Selon cette analyse de 'para', les individus qui sont les plus proches du centre de chaque cluster sont : 2074, 564, 674 et 1516. Cependant, les individus qui sont les plus distants du centre de chaque cluster sont : 1062, 1405, 1508 et 1669.
+  
+<br />
+<br />
+  
+*Suite dans la partie 2...*
+
