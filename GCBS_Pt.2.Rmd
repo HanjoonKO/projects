@@ -1,0 +1,242 @@
+---
+title: "Analyse de GCBS (Generic Conspiracist Beliefs Scale)"
+subtitle: "Deuxième partie"
+author: "Hanjoon Ko"
+date: "`r Sys.Date()`"
+output: 
+ html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+---
+
+* UPN M2 DES 23/24
+* Auteur : Hanjoon Ko
+* Les questionnaires GCBS: https://openpsychometrics.org/tests/GCBS/
+* Producteur originaire : Département de psychologie, Université Goldsmiths
+
+
+```{r include=FALSE}
+
+library(skimr)
+library(readr)
+library(FactoMineR)
+library(factoextra)
+library(ggrepel)
+library(explor)
+library(missMDA)
+library(cluster)
+library(missMDA)
+library(rpart)
+library(rpart.plot)
+library(randomForest) 
+library(party)
+library(modelr)
+library(plotly)
+library(ppcor)
+library(dagitty)
+library(tidyverse)
+data_complot <- read_csv("~/data_complot.csv")
+```
+
+
+
+# IV. Peut-on prédire un locuteur natif anglais par les mots ?
+
+### Objectif
+La colonne de 'VCL' représente des mots anglais conçus pour évaluer la littéracie des participants du test. Avec ces données, nous allons les analyser afin de distinguer un locuteur natif anglais. En général, un locuteur natif a une meilleure connaissance des mots anglais, mais il existe également des mots faciles que beaucoup de non-locuteurs connaissent déjà. En examinant les résultats de cette analyse, nous pourrions déterminer quels mots contribuent le plus à distinguer un locuteur natif anglais.  
+  
+![](C:/Users/Ko/OneDrive/Nanterre/M2-S1/Analyse de données/Complot/VCL_capture.png)
+
+
+### Méthode
+#### L'analyse d'arbre et de forêt  
+
+![](C:/Users/Ko/OneDrive/Nanterre/M2-S1/Analyse de données/complot/beautiful_tree.jpg)  
+  *© National Trust Images / James Dobson*
+  
+Pour dire simplement, l'arbre de décision ('Decision tree') divise les variables selon une condition spécifique. La variable la plus importante se situe en haut et on l'appelle 'Nœud racine' ('Root node'). Si les nœuds se situent au-dessus des autres nœuds, ils s'appellent 'Nœud parent' ('Parent node') et ceux qui sont en dessous de chaque nœud parental s'appellent 'Nœud enfant' ('Child node'). Les nœuds qui se situent le plus bas sont appelés 'Nœud feuille' ('Leaf node'). 'Nœud interne' ('Internal node') signifie les nœuds qui ne sont pas un 'Nœud feuille'. L'importance de chaque nœud, c'est-à-dire la position de chaque nœud, est décidée par le gain d'information ('Information gain'). Le gain d'information est calculé par la valeur d'entropie. Si la valeur d'entropie est élevée, cela signifie que les variables sont bien mélangées de manière arbitraire, mais si la valeur est zéro, c'est-à-dire que les variables sont toutes les mêmes.
+
+### Étape  
+
+```{r echo=FALSE}
+data_complot_eng <- data_complot %>% filter(engnat != '0')
+```
+En premier lieu, on supprime les lignes affichant zéro dans la colonne 'engnat'. Il n'y a que deux choix pour cette question : 'Yes (1)' ou 'No (2)'. Étant donné que la valeur '0' indique que la réponse n'est pas cochée, nous ne souhaitons pas les inclure dans le graphique d'arbre que nous allons générer.
+
+```{r echo=FALSE}
+data_complot_eng$engnat <- as.factor(data_complot_eng$engnat)
+```
+Ensuite, on convertit les variables de la colonne 'engnat (natif anglais)' en variables catégorielles. Pour cette analyse, ce que l'on souhaite observer, c'est si les gens sont locuteurs natifs anglais ou non. Ainsi, les données doivent être 'Yes (1)' ou 'Non (2)'. Si les données sont analysées comme des variables continues, on aurait des valeurs telles que '1.7', qui ne seraient pas pertinentes pour notre objectif.  
+
+
+![](C:/Users/Ko/OneDrive/Nanterre/M2-S1/Analyse de données/complot/eng_nat.png)  
+
+ <br />
+ 
+#### Entraînement et validation
+```{r echo=FALSE, message=FALSE}
+complot_eng_train <- data_complot_eng %>% slice_sample(prop = 0.8)
+complot_eng_test <- data_complot_eng %>% anti_join(complot_eng_train)
+```
+
+Pour effectuer l'analyse d'arbre, on divise les données en deux parties : les données d'entraînement et les données de validation. Avec les données d'entraînement (training), on peut entraîner la machine un nombre illimité de fois pour créer plusieurs modèles, contrairement aux données de validation avec lesquelles on ne peut effectuer qu'un seul test pour valider notre modèle. Normalement, on utilise 80% des données pour l'entraînement et le reste pour la validation.
+
+
+### Résultat
+
+ <br />
+ 
+#### Déssinons un graphique d'arbre montrant le nombre (entraînement)
+```{r echo=FALSE}
+arbre_1 <- rpart(engnat~ VCL1+VCL2+VCL3+VCL4+VCL5+VCL6+VCL7+VCL8+VCL9+VCL10+VCL11+VCL12+VCL13+VCL14+VCL15+VCL16,
+                 data = complot_eng_train)
+prp(arbre_1, type = 1,extra=1, box.palette = "Blues")
+```
+
+Vu qu'un nœud qui se situe le plus haut est le plus important, VCL 13 ('abysmal') est le mot le plus crucial pour identifier un locuteur natif. Le chiffre '1' représente 'Yes' pour la question qui demande si la personne est un locuteur natif. En dessous de ce chiffre dans le même nœud, le nombre à gauche indique le nombre de personnes ayant choisi 'Yes (1)', tandis que celui à droite indique le nombre de personnes ayant choisi 'No (2)'. On peut ainsi constater qu'il y avait environ trois fois plus de personnes ayant répondu qu'elles sont des locuteurs natifs. Le deuxième mot le plus important est VCL8 ('epistemology'). Les autres VCLs changent à chaque étape de l'entraînement.
+
+En examinant les derniers nœuds ('Child nodes'), dans un nœud où le numéro 1 est marqué, il y a plus de personnes qui ont choisi '1', et l'inverse pour le nœud avec le numéro 2. C'est-à-dire que les branches sont bien divisées pour classifier les variables.  
+
+ <br />
+ 
+#### Déssinons un graphique d'arbre montrant le pourcentage (entraînement)
+```{r echo=FALSE}
+rpart.plot(arbre_1)
+```
+
+Avec ce codage, on peut également voir l'arbre avec le pourcentage. Le chiffre sous le nombre '1' représente le pourcentage de la classe, et le chiffre avec le symbole '%' est le pourcentage de la population totale. Par exemple, 25% (0.25) indique que le nœud a choisi '1' pour la question VCL13, et le pourcentage du nœud parent est bien sûr de 100%.  
+
+ <br />
+ 
+#### Validation sur les données d'entraînement
+
+```{r echo=FALSE}
+classe_prevue <- predict(arbre_1, 
+                           complot_eng_train, type = "class")
+table(classe_prevue, complot_eng_train$engnat)
+```
+
+Sur cette matrice de confusion ('confusion matrix'), nous avons obtenu vers 1 450 vrais positifs (Prédiction : 'Yes', Réponse réelle : 'Yes') et vers 400 faux positifs (Prédiction : 'Yes', Réponse réelle : 'No'). Pour celles que la machine a prédites comme ayant une réponse 'No', nous avons eu vers 20 faux négatifs (Prédiction : 'No', Réponse réelle : 'Yes') et vers 50 vrais négatifs (Prédiction : 'No', Réponse réelle : 'No').  
+**Le chiffre pourrait changer à chaque fois d'entraînement**
+
+ <br />
+ 
+#### Validation sur les données de test
+
+```{r echo=FALSE}
+classe_prevue_test <- predict(arbre_1, 
+                                complot_eng_test, 
+                                type = "class")
+table(classe_prevue_test, complot_eng_test$engnat)
+```
+
+Comme le résultat de validation sur les données d'entraînement, les prédictions de la machine sont globalement correctes. Cependant, il y a également un certain nombre de variables mal prédites. Par conséquent, on peut avoir plus ou moins confiance dans ce classement.
+
+ <br />
+ 
+#### Forêt aléatoire
+La forêt aléatoire est une méthode où plusieurs arbres de décision sont créés avec des conditions sélectionnées de manière aléatoire, et la valeur prédite la plus fréquente est choisie comme valeur prédite finale.
+
+
+```{r echo=FALSE}
+foret_1 <- randomForest(engnat ~ VCL1+VCL2+VCL3+VCL4+VCL5+VCL6+VCL7+VCL8+VCL9+VCL10+VCL11+VCL12+VCL13+VCL14+VCL15+VCL16, 
+                        complot_eng_train)
+
+varImpPlot(foret_1)
+```
+
+La condition qui se situe le plus à droite est la plus importante pour cette analyse. Nous pouvons constater que VCL13 est le plus important pour identifier un locuteur natif anglais, comme nous l'avons vu dans l'analyse d'arbre.
+
+<br />
+
+# V. L'âge et les caractères clustérisés ont-ils une corrélation avec le temps employé aux questions personnelles (survey) ?
+
+### Objectif
+Le jeu de données nous fournit le temps consacré à chaque question de complot, à la lecture de l'introduction, au test entier et aux questions personnelles (survey). Avec une autre colonne quantitative, l'âge, nous allons déterminer s'il existe une différence entre les participants en fonction de leur âge pour répondre au 'survey'. Si quelqu'un n'a même pas lu les questions personnelles, le temps consacré serait zéro. Ainsi, nous pouvons observer la proportion de participation aux questions non-obligatoires et, en même temps, la vitesse de réponse. De plus, en appliquant les quatre types de caractères que nous avons déjà clustérisés, le graphique pourrait également montrer les différences entre les caractères.  
+  
+### Méthode
+La régression linéaire est une méthode permettant de trouver une ligne qui représente la meilleure corrélation entre les valeurs sur l'axe X et celles sur l'axe Y. S'il y a une ligne de 'y=wx+b' dans un graphe de fonction du second degré, la manière de trouver les meilleures valeurs de 'w' et 'b' consiste à rechercher une ligne qui soit le moins éloignée possible de toutes les variables dans le graphe. La distance entre la valeur de la fonction et la valeur réelle des variables est appelée le résidu. Par conséquent, si nous cherchons la ligne ayant le résidu le plus faible, c'est-à-dire que le but de la régression linéaire est atteint.
+
+
+### Étape
+
+```{r include=FALSE}
+data_complot <- data_complot %>% filter(data_complot$age < 200)
+complot_tipi <- data_complot %>% dplyr::select(34:43)
+complot_tipi <- complot_tipi %>%
+                filter(TIPI1 > 0, TIPI2 > 0, TIPI3 > 0, TIPI4 > 0, TIPI5 > 0, TIPI6 > 0, TIPI7 > 0, TIPI8 > 0, TIPI9 > 0, TIPI10 > 0)
+pca_tipi <- PCA(complot_tipi)
+```
+```{r include=FALSE}
+complot_tipi_hcpc <- HCPC(pca_tipi, nb.clust = 4)
+complot_tipi_2 <- complot_tipi_hcpc$data.clust
+complot_tipi_merged <- cbind(complot_tipi,complot_tipi_2)
+complot_tipi_merged <- complot_tipi_merged[,-c(11:20)]
+```
+
+En premier lieu, il faut importer le jeu de données avec la colonne 'clust', où nous avons regroupé les 10 TIPI en 4 clusters. Étant donné que le nombre de lignes est de 2466, nous devons ajuster le nombre de lignes de la colonne 'surveyelapse' à 2466. Comme dans la première partie, nous allons supprimer les lignes atypiques de l'âge et des TIPI.
+
+```{r echo=FALSE}
+complot_survey <- data_complot %>% filter(age <200) %>%
+  filter(TIPI1 > 0, TIPI2 > 0, TIPI3 > 0, TIPI4 > 0, TIPI5 > 0, TIPI6 > 0, TIPI7 > 0, TIPI8 > 0, TIPI9 > 0, TIPI10 > 0)
+```
+
+En deuxième lieu, nous joignons les deux jeux de données : celui avec la colonne 'surveyelapse' et celui avec la colonne 'clust'. Nous sommes prêts à effectuer l'analyse en utilisant la régression linéaire.
+
+```{r include=FALSE}
+complot_survey_2 <- cbind(complot_survey, complot_tipi_merged)
+```
+
+
+
+### Résultat
+Nous établions une hypothèse pour l'analyse.  
+H0 : L'âge et le caractère n'ont pas la relation avec le temps employé sur le 'survey'.  
+Ensuite, nous allons examiner la régression linéaire multiple avec interactions.  
+
+```{r echo=FALSE}
+modele_survey <- lm(age ~ surveyelapse * clust, data = complot_survey_2)
+summary(modele_survey)
+```
+Si le 'Multiple R-squared' est proche de 1, cela signifie que les variables se situent près de la ligne de régression. Cependant, la valeur de notre modèle n'est pas proche de 1 (0.07591). Néanmoins, la valeur P est inférieure à 0.05, ce qui est très petite. Cela signifie que nous pouvons rejeter l'hypothèse nulle et examiner la corrélation entre les trois variables.
+
+ <br />
+ 
+#### Visualisation
+```{r echo=FALSE}
+complot_survey_2 %>% 
+  add_predictions(modele_survey) %>% 
+  ggplot() +
+  aes(surveyelapse, age, col = clust) +
+  geom_point() +
+  geom_smooth(aes(y = pred), method = "lm")
+```
+```{r echo=FALSE}
+complot_survey_2_filter <- complot_survey_2 %>%
+  select(unique(colnames(.))) %>%
+  filter(surveyelapse < 1000)
+```
+
+Vu que le graphique n'est pas lisible en raison des valeurs atypiques, nous avons extrait les données de la colonne 'surveylapse' qui ont duré moins de 1000 secondes.
+
+```{r echo=FALSE}
+complot_survey_2_filter %>% 
+  add_predictions(modele_survey) %>% 
+  ggplot() +
+  aes(surveyelapse, age, col = clust) +
+  geom_point() +
+  geom_smooth(aes(y = pred), method = "lm")
+```
+
+En premier lieu, les personnes qui se trouvent dans le Clust4 (TIPI3, 5, 7, 9 : Ouvertes aux nouvelles expériences, complexes / Sympathiques, chaleureuses / Calmes, émotionnellement stables) sont plus âgées que les autres. De plus, la ligne de régression du Clust4 a une légère pente positive vers le haut, tout comme la ligne du Clust2 (TIPI1, 2 : Extraverti, enthousiaste / Critique, querelleur). Par conséquent, nous pouvons observer que les lignes du Clust4 et du Clust2 indiquent une corrélation entre l'âge et le temps employé. Les autres lignes sont plates, signifiant qu'il n'y a pas de relation positive pour les personnes dans ces clusters. Comme nous l'avons vu avec le 'Multiple R-squared', les variables sont éloignées des lignes.
+
+
+# Conclusion
+En raison de la grande quantité de données disponibles, nous avons pu tenter diverses analyses entre les colonnes. Il était intéressant de constater que les questions liées aux extraterrestres étaient plus fortement corrélées les unes aux autres par rapport aux autres questions, et nous avons également noté une corrélation faible mais présente avec le genre. Bien que faible, une corrélation négative entre le niveau d'éducation et la croyance en l'existence des extraterrestres a également été observée. Les résultats du PCA présentant un angle de 180 degrés et les lignes de tendance directement visibles dans le pairplot étaient également intrigants.  
+En examinant la manière dont le GCBS a classifié la personnalité en 10 catégories, nous avons réfléchi à la relation entre les caractères. Il était surprenant de voir une classification en quatre clusters, et notamment de constater que des traits tels que 'Extraverted' et 'Querrelsome' étaient regroupés dans le même cluster. Comme la classification de la personnalité était difficile à prévoir, je n'attandais à ce que la distinction des conspirationnistes soit également complexe. Bien que nous ayons tenté d'analyser la corrélation entre les scores de conspiration (Q1-Q15) et les caractères, aucune corrélation nette n'a été observée (l'angle orthogonale'). 
+J'ai pensais naturellement que les locuteurs natifs connaîtraient davantage de mots anglais, mais le processus d'analyse directe a apporté des idées nouvelles et plus claires. En outre, les mots permettant de distinguer un locuteur natif n'étaient ni trop simples ni trop difficiles, mais plutôt d'un niveau de difficulté modéré. Après l'analyse, des mots comme 'abysmal' et 'épistémologie', ni trop faciles ni trop difficiles, semblaient vraiment utiles pour distinguer les locuteurs natifs. Cela pourrait s'avérer utile lors de l'analyse des caractéristiques des locuteurs natifs et non natifs.  
+Enfin, le graphique obtenu en distinguant simultanément l'âge, le temps de réponse au sondage et les caractères était fascinant. Nous avons confirmé la distinction de l'âge en fonction de la personnalité, et nous avons également pu vérifier si la personnalité influençait le temps de réponse en fonction de l'âge.  
+Initialement, nous espérions des résultats clairs, tels que 'une personnalité spécifique est fortement associée à la propension à croire aux théories du complot' ou 'les personnes appartenant à une certaine religion ont plus tendance à être conspirationnistes', mais les relations entre les données se sont révélées plus complexes que prévu. Contrairement aux attentes, des corrélations claires n'étaient pas facilement identifiables, et nous avons dû analyser différentes combinaisons de colonnes pour obtenir les résultats les plus intéressants.  
+Cette analyse pourrait contribuer à étayer la validité de l'étude GCBS. En examinant la distribution des questions, la classification de la personnalité, les mots anglais, etc., nous avons pu évaluer la sophistication de l'étude. Cependant, pour répondre à la question initiale de 'cette personne est-elle conspirationniste ?', une analyse plus approfondie basée sur Q1-Q15 semble nécessaire.
+
